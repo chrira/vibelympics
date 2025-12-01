@@ -1,0 +1,9 @@
+**/vendor
+**/node_modules
+**/.git
+**/.github
+**/.DS_Store
+**/*.log
+bin
+build
+*.tmp
