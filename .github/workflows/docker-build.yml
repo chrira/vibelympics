@@ -42,6 +42,7 @@ jobs:
 
     - name: Build and push
       uses: docker/build-push-action@v4
+      id: build
       with:
         context: .
         file: round_1/Dockerfile
@@ -50,3 +51,39 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+    
+    - name: Install Grype
+      if: always()
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+        grype version
+
+    - name: Scan image for vulnerabilities
+      if: always()
+      run: |
+        # Use the first tag from the meta step
+        IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1 | tr -d ' ')
+        echo "Scanning image: $IMAGE_TAG"
+        
+        # Run grype with the following options:
+        # -q: quiet output
+        # --file: output to file
+        # --fail-on: fail if vulnerabilities are found at or above the specified severity level
+        # --output: output format
+        grype "$IMAGE_TAG" \
+          --file grype-scan-results.sarif \
+          --fail-on high \
+          --output sarif \
+          --add-cpes-if-none \
+          --only-fixed
+        
+        # Upload scan results as an artifact
+        echo "Scan results saved to grype-scan-results.sarif"
+      
+    - name: Upload Grype scan results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: grype-scan-results
+        path: grype-scan-results.sarif
+        retention-days: 7
