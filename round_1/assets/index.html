@@ -167,6 +167,10 @@
         const finalMovesDisplay = document.getElementById('final-moves');
         const playAgainBtn = document.getElementById('play-again-btn');
 
+        // Emoji configuration
+        const EMOJIS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼'];
+        const BOARD_SIZE = 4; // 4x4 grid
+
         let canFlip = true;
         let gameState = {
             cards: [],
@@ -176,9 +180,30 @@
             gameOver: false
         };
 
+        // Create and shuffle emoji pairs
+        function createShuffledEmojis() {
+            // Create pairs of each emoji
+            const emojiPairs = [...EMOJIS, ...EMOJIS];
+            
+            // Shuffle the emojis
+            for (let i = emojiPairs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [emojiPairs[i], emojiPairs[j]] = [emojiPairs[j], emojiPairs[i]];
+            }
+            
+            return emojiPairs;
+        }
+
         // Initialize the game
         async function initGame() {
-            const response = await fetch('/api/reset', { method: 'POST' });
+            const emojis = createShuffledEmojis();
+            const response = await fetch('/api/reset', { 
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ emojis })
+            });
             gameState = await response.json();
             renderGame();
         }
@@ -187,17 +212,23 @@
         function renderGame() {
             gameBoard.innerHTML = '';
             movesDisplay.textContent = gameState.moves;
-            matchesDisplay.textContent = gameState.matches;
+            matchesDisplay.textContent = `${gameState.matches}/${EMOJIS.length}`;  // Show progress like 2/8
 
-            gameState.cards.forEach(card => {
+            // Create a 4x4 grid
+            gameBoard.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
+            
+            gameState.cards.forEach((card, index) => {
                 const cardElement = document.createElement('div');
                 cardElement.className = 'card';
                 if (card.Matched) {
                     cardElement.classList.add('matched');
                 }
-                cardElement.dataset.id = card.ID;
-                cardElement.textContent = card.Flipped ? card.Emoji : '?';
-
+                // Ensure ID is properly set as a string
+                cardElement.dataset.id = String(card.ID || index);
+                // Store the card's ID as a property for easy access
+                cardElement._cardId = card.ID || index;
+                // Show emoji if card is flipped or matched, otherwise show '?'
+                cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '?';
                 gameBoard.appendChild(cardElement);
             });
 
@@ -243,27 +274,37 @@
             }
         }
 
+        // Track which cards are currently showing their emoji
+        const shownCards = new Set();
+
         // Event delegation for card clicks
         gameBoard.addEventListener('click', (e) => {
-            // Find the closest card element that was clicked
             const cardElement = e.target.closest('.card');
             if (!cardElement || !canFlip) return;
             
-            const cardId = cardElement.dataset.id;
-            if (!cardId || cardElement.classList.contains('matched')) {
+            // Use the stored _cardId which should match the server's ID type
+            const cardId = cardElement._cardId;
+            if (cardId === undefined || cardElement.classList.contains('matched')) {
                 return;
             }
             
-            // Show 'click' text on the card
-            const originalText = cardElement.textContent;
-            cardElement.textContent = 'click';
+            // Find the card in gameState using loose equality to handle type differences
+            const card = gameState.cards.find(c => c.id == cardId);
+            if (!card) return;
             
-            // Revert back to original text after a short delay
-            setTimeout(() => {
-                cardElement.textContent = originalText;
-                // Then handle the click
+            // Toggle the card's visibility
+            if (shownCards.has(cardId)) {
+                // Hide the emoji
+                cardElement.textContent = '?';
+                shownCards.delete(cardId);
+            } else {
+                // Show the emoji
+                cardElement.textContent = card.Emoji;
+                shownCards.add(cardId);
+                
+                // Process the click to check for matches
                 handleCardClick(cardId);
-            }, 300);
+            }
         });
 
         // Event listeners
