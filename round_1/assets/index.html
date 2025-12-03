@@ -277,33 +277,85 @@
         // Track which cards are currently showing their emoji
         const shownCards = new Set();
 
+        // Replace the shownCards Set and click handler with this new implementation
+
+        // Track flipped cards (max 2 at a time)
+        let flippedCards = [];
+        let canBeFlipped = true;
+
         // Event delegation for card clicks
         gameBoard.addEventListener('click', (e) => {
             const cardElement = e.target.closest('.card');
-            if (!cardElement || !canFlip) return;
+            if (!cardElement || !canBeFlipped) return;
             
-            // Use the stored _cardId which should match the server's ID type
             const cardId = cardElement._cardId;
-            if (cardId === undefined || cardElement.classList.contains('matched')) {
+            if (cardId === undefined || 
+                cardElement.classList.contains('matched') || 
+                cardElement.textContent === '✓') {
                 return;
             }
             
-            // Find the card in gameState using loose equality to handle type differences
+            // Find the card in gameState
             const card = gameState.cards.find(c => c.id == cardId);
             if (!card) return;
+
+            // If card is already flipped, do nothing
+            if (flippedCards.some(c => c.id === cardId)) return;
             
-            // Toggle the card's visibility
-            if (shownCards.has(cardId)) {
-                // Hide the emoji
-                cardElement.textContent = '?';
-                shownCards.delete(cardId);
-            } else {
-                // Show the emoji
-                cardElement.textContent = card.emoji;
-                shownCards.add(cardId);
+            // Show the emoji
+            cardElement.textContent = card.emoji;
+            
+            // Add to flipped cards
+            flippedCards.push({ id: cardId, element: cardElement, emoji: card.emoji });
+            
+            // If we have two cards flipped, check for a match
+            if (flippedCards.length === 2) {
+                canBeFlipped = false;
                 
-                // Process the click to check for matches
-                handleCardClick(cardId);
+                if (flippedCards[0].emoji === flippedCards[1].emoji) {
+                    // Show the emoji for 3 seconds before showing the checkmark
+                    flippedCards.forEach(card => {
+                        card.element.textContent = card.emoji;  // Show the emoji first
+                        card.element.classList.add('matched');   // Mark as matched immediately
+                    });
+                    
+                    // After 3 seconds, show the checkmark
+                    setTimeout(() => {
+                        flippedCards.forEach(card => {
+                            if (card.element.classList.contains('matched')) {  // Only if still matched
+                                card.element.textContent = '✓';
+                            }
+                        });
+                        
+                        // Update matches count after the animation
+                        gameState.matches++;
+                        matchesDisplay.textContent = `${gameState.matches}/${EMOJIS.length}`;
+                        
+                        // Check for game over
+                        if (gameState.matches === EMOJIS.length) {
+                            gameState.gameOver = true;
+                            finalMovesDisplay.textContent = gameState.moves;
+                            gameOverScreen.classList.add('show');
+                        }
+                    }, 3000);
+                } else {
+                    // No match - flip them back after a delay
+                    setTimeout(() => {
+                        flippedCards.forEach(card => {
+                            card.element.textContent = '?';
+                        });
+                    }, 1000);
+                }
+                
+                // Clear flipped cards and re-enable flipping
+                setTimeout(() => {
+                    flippedCards = [];
+                    canBeFlipped = true;
+                }, 1000);
+                
+                // Update moves
+                gameState.moves++;
+                movesDisplay.textContent = gameState.moves;
             }
         });
 

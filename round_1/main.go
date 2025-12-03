@@ -84,7 +84,7 @@ func main() {
 func resetGame() {
 	// Create pairs of cards with emojis
 	var cards []Card
-	id := 1
+	id := 0
 	for _, emoji := range emojis {
 		// Add two cards with the same emoji
 		cards = append(cards, Card{ID: id, Emoji: emoji})
