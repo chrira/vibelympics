@@ -5,7 +5,7 @@
 ###
 
 ## Build stage
-FROM cgr.dev/chainguard/go:latest as builder
+FROM cgr.dev/chainguard/go:latest AS builder
 WORKDIR /src
 
 # Copy module files first for better caching

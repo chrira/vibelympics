@@ -34,7 +34,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v4
       with:
-        images: ghcr.io/${{ github.repository }}/vibelympics-round1
+        images: ghcr.io/${{ github.repository }}
         tags: |
           type=sha,format=long
           type=ref,event=branch
@@ -51,7 +51,7 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-    
+
     - name: Install Grype
       if: always()
       run: |
