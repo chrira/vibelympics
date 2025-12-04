@@ -1,25 +1,15 @@
-# Round 1 – Go Web App (Chainguard images)
+# Round 1 – Go Web App (Chainguard Images)
 
-Dies ist eine kleine, in Go geschriebene Web-Anwendung im Ordner `round_1`.
+This is a small web application written in Go, located in the `round_1` directory.
 
-Funktionalität:
-- Stellt eine einfache UI auf Port `8080` zur Verfügung
-- Die HTML-Datei wird in das Binary eingebettet (Go 1.22 `embed`)
-- Multi-stage Dockerfile verwendet Chainguard-Images
+## Features:
+- Serves a simple UI on port `8080`
+- The HTML file is embedded in the binary (using Go 1.22 `embed`)
+- Multi-stage Dockerfile using Chainguard images
 
-### Build lokal
-Voraussetzungen: Go >= 1.22
+## Test
 
-```bash
-# Bauen
-go build -o bin/vibelympics
-
-# Ausführen
-PORT=8080 ./bin/vibelympics
-```
-
-### Docker – Chainguard Images
- Der Dockerfile verwendet Chainguard-Images für Builder und Runtime. Der Build- und Runtime-Base ist `cgr.dev/chainguard/go:latest` (Chainguard registry).
+Execute the commands from the round_1 directory.
 
 Build & Run:
 ```bash
@@ -29,10 +19,3 @@ docker build -t vibelympics:round1 .
 # Run container (expose 8080)
 docker run --rm -p 8080:8080 vibelympics:round1
 ```
-
-### Alternative / Makefile
-Falls gewünscht, kann ein `Makefile` verwendet werden. Die Nutzung von Container-Scan-Tools (z. B. Trivy, or Chainguard's tools) ist empfohlen, da die Images minimal gehalten sind.
-# Challenge 1
-
-The guidelines for this mysterious challenge will be revealed when Round 1 opens.
-
