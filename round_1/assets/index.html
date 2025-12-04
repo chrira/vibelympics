@@ -136,10 +136,10 @@
 </head>
 <body>
     <header>
-        <h1>Memory Game</h1>
+        <h1>🧠 🎮</h1>
         <div class="game-info">
-            <div>Moves: <span id="moves">0</span></div>
-            <div>Matches: <span id="matches">0</span>/8</div>
+            <div>👣: <span id="moves">0</span></div>
+            <div>✅: <span id="matches">0</span>/8</div>
         </div>
     </header>
 
@@ -148,7 +148,7 @@
     </div>
 
     <div class="controls">
-        <button id="reset-btn">New Game</button>
+        <button id="reset-btn" title="New Game">🆕🔄</button>
     </div>
 
     <div class="game-over" id="game-over">
@@ -227,8 +227,8 @@
                 cardElement.dataset.id = String(card.id || index);
                 // Store the card's id as a property for easy access
                 cardElement._cardId = card.id || index;
-                // Show emoji if card is flipped or matched, otherwise show '?'
-                cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '?';
+                // Show emoji if card is flipped or matched, otherwise show '❓'
+                cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '❓';
                 gameBoard.appendChild(cardElement);
             });
 
@@ -342,7 +342,7 @@
                     // No match - flip them back after a delay
                     setTimeout(() => {
                         flippedCards.forEach(card => {
-                            card.element.textContent = '?';
+                            card.element.textContent = '❓';
                         });
                     }, 1000);
                 }
