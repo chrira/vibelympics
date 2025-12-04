@@ -11,7 +11,7 @@ This is a small web application written in Go, located in the `round_1` director
 
 Build Image and scan it for vulnerabilities.
 
-## Test
+## Build and Play
 
 Execute the commands from the round_1 directory.
 
@@ -22,4 +22,10 @@ docker build -t vibelympics:round1 .
 
 # Run container (expose 8080)
 docker run --rm -p 8080:8080 vibelympics:round1
+```
+
+## Test
+
+```bash
+go test -v
 ```

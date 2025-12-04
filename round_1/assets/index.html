@@ -138,8 +138,8 @@
     <header>
         <h1>🧠 🎮</h1>
         <div class="game-info">
-            <div>👣: <span id="moves">0️⃣0️⃣0️⃣</span></div>
-            <div>✅: <span id="matches">0️⃣0️⃣0️⃣</span>/8️⃣</div>
+            <div>👣﹕ <span id="moves">0️⃣0️⃣0️⃣</span></div>
+            <div>✅﹕ <span id="matches">0️⃣0️⃣0️⃣</span>／8️⃣</div>
         </div>
     </header>
 
@@ -152,9 +152,9 @@
     </div>
 
     <div class="game-over" id="game-over">
-        <h2>Congratulations! 🎉</h2>
-        <p>You won in <span id="final-moves">0</span> moves!</p>
-        <button id="play-again-btn">Play Again</button>
+        <h2>🎉 🎉 🎉 🎉 🎉</h2>
+        <p>👣 ﹕<span id="final-moves">0️⃣0️⃣0️⃣</span> moves!</p>
+        <button id="play-again-btn">🆕🔄</button>
     </div>
 
     <script>
@@ -221,7 +221,7 @@
             movesDisplay.textContent = toEmojiNumber(gameState.moves);
             // Initialize matches to 0 if not set
             const currentMatches = gameState.matches || 0;
-            matchesDisplay.textContent = `${toEmojiNumber(currentMatches)}/${toEmojiNumber(EMOJIS.length)}`;  // Show progress with emoji digits
+            matchesDisplay.textContent = `${toEmojiNumber(currentMatches)}／${toEmojiNumber(EMOJIS.length)}`;  // Show progress with emoji digits
 
             // Create a 4x4 grid
             gameBoard.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
@@ -332,7 +332,7 @@
                     setTimeout(() => {
                         flippedCards.forEach(card => {
                             if (card.element.classList.contains('matched')) {  // Only if still matched
-                                card.element.textContent = '✓';
+                                //card.element.textContent = '✓';
                             }
                         });
                         
