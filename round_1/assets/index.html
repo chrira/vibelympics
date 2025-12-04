@@ -153,7 +153,7 @@
 
     <div class="game-over" id="game-over">
         <h2>🎉 🎉 🎉 🎉 🎉</h2>
-        <p>👣 ﹕<span id="final-moves">0️⃣0️⃣0️⃣</span> moves!</p>
+        <p>👣 ﹕<span id="final-moves">0️⃣0️⃣0️⃣</span></p>
         <button id="play-again-btn">🆕🔄</button>
     </div>
 
@@ -236,13 +236,13 @@
                 cardElement.dataset.id = String(card.id || index);
                 // Store the card's id as a property for easy access
                 cardElement._cardId = card.id || index;
-                // Show emoji if card is flipped or matched, otherwise show '❓'
-                cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '❓';
+                // Show emoji if card is flipped or matched, otherwise show '🇨🇭'
+                cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '🇨🇭';
                 gameBoard.appendChild(cardElement);
             });
 
             if (gameState.gameOver) {
-                finalMovesDisplay.textContent = gameState.moves;
+                finalMovesDisplay.textContent = toEmojiNumber(gameState.moves);
                 gameOverScreen.classList.add('show');
             } else {
                 gameOverScreen.classList.remove('show');
@@ -343,7 +343,7 @@
                         // Check for game over
                         if (gameState.matches === EMOJIS.length) {
                             gameState.gameOver = true;
-                            finalMovesDisplay.textContent = gameState.moves;
+                            finalMovesDisplay.textContent = toEmojiNumber(gameState.moves);
                             gameOverScreen.classList.add('show');
                         }
                     }, 3000);
@@ -351,7 +351,7 @@
                     // No match - flip them back after a delay
                     setTimeout(() => {
                         flippedCards.forEach(card => {
-                            card.element.textContent = '❓';
+                            card.element.textContent = '🇨🇭';
                         });
                     }, 1000);
                 }
