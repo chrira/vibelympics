@@ -223,10 +223,10 @@
                 if (card.Matched) {
                     cardElement.classList.add('matched');
                 }
-                // Ensure ID is properly set as a string
-                cardElement.dataset.id = String(card.ID || index);
-                // Store the card's ID as a property for easy access
-                cardElement._cardId = card.ID || index;
+                // Ensure id is properly set as a string
+                cardElement.dataset.id = String(card.id || index);
+                // Store the card's id as a property for easy access
+                cardElement._cardId = card.id || index;
                 // Show emoji if card is flipped or matched, otherwise show '?'
                 cardElement.textContent = (card.Flipped || card.Matched) ? card.Emoji : '?';
                 gameBoard.appendChild(cardElement);

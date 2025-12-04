@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/binary"
 	"encoding/json"
 	"html/template"
 	"log"
@@ -81,6 +82,21 @@ func main() {
 	}
 }
 
+// secureRandomInt generates a cryptographically secure random integer in [0, n)
+func secureRandomInt(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	var b [8]byte
+	_, err := rand.Read(b[:])
+	if err != nil {
+		return 0
+	}
+	// Convert the random bytes to an integer
+	randomUint := binary.BigEndian.Uint64(b[:])
+	return int(randomUint % uint64(n))
+}
+
 func resetGame() {
 	// Create pairs of cards with emojis
 	var cards []Card
@@ -92,10 +108,32 @@ func resetGame() {
 		id += 2
 	}
 
-	// Shuffle the cards
-	rand.Shuffle(len(cards), func(i, j int) {
+	// Fisher-Yates shuffle implementation with crypto/rand
+	n := len(cards)
+	for i := n - 1; i > 0; i-- {
+		j := secureRandomInt(i + 1)
 		cards[i], cards[j] = cards[j], cards[i]
-	})
+	}
+	
+	// shuffle the cards again to ensure good randomness
+	for i := n - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		cards[i], cards[j] = cards[j], cards[i]
+	}
+
+
+
+	  r := rand.New(rand.NewSource(time.Now().Unix()))
+	  // We start at the end of the slice, inserting our random
+	  // values one at a time.
+	  for n := len(cards); n > 0; n-- {
+	    randIndex := r.Intn(n)
+	    // We swap the value at index n-1 and the random index
+	    // to move our randomly chosen value to the end of the
+	    // slice, and to move the value that was at n-1 into our
+	    // unshuffled portion of the slice.
+	    cards[n-1], cards[randIndex] = cards[randIndex], cards[n-1]
+	  }
 
 	// Initialize game state
 	game = &GameState{
