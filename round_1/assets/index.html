@@ -212,7 +212,9 @@
         function renderGame() {
             gameBoard.innerHTML = '';
             movesDisplay.textContent = gameState.moves;
-            matchesDisplay.textContent = `${gameState.matches}/${EMOJIS.length}`;  // Show progress like 2/8
+            // Initialize matches to 0 if not set
+            const currentMatches = gameState.matches || 0;
+            matchesDisplay.textContent = `${currentMatches}/${EMOJIS.length}`;  // Show progress like 2/8
 
             // Create a 4x4 grid
             gameBoard.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
@@ -328,7 +330,7 @@
                         });
                         
                         // Update matches count after the animation
-                        gameState.matches++;
+                        gameState.matches = (gameState.matches || 0) + 1;
                         matchesDisplay.textContent = `${gameState.matches}/${EMOJIS.length}`;
                         
                         // Check for game over
