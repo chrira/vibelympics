@@ -43,6 +43,9 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v4
       id: build
+      permissions:
+        contents: read
+        packages: write
       with:
         context: round_1/
         file: round_1/Dockerfile
