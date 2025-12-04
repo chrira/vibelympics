@@ -33,7 +33,7 @@ type GameState struct {
 }
 
 var (
-	emojis = []string{"🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼"}
+	emojis = []string{"🏡", "🐮", "🐭", "🏔️", "🐰", "🧀", "⏰", "🍫"}
 	game   *GameState
 )
 

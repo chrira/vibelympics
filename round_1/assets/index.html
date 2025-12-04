@@ -138,8 +138,8 @@
     <header>
         <h1>🧠 🎮</h1>
         <div class="game-info">
-            <div>👣: <span id="moves">0</span></div>
-            <div>✅: <span id="matches">0</span>/8</div>
+            <div>👣: <span id="moves">0️⃣0️⃣0️⃣</span></div>
+            <div>✅: <span id="matches">0️⃣0️⃣0️⃣</span>/8️⃣</div>
         </div>
     </header>
 
@@ -168,7 +168,7 @@
         const playAgainBtn = document.getElementById('play-again-btn');
 
         // Emoji configuration
-        const EMOJIS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼'];
+        const EMOJIS = ['🏡', '🐮', '🐭', '🏔️', '🐰', '🧀', '⏰', '🍫'];
         const BOARD_SIZE = 4; // 4x4 grid
 
         let canFlip = true;
@@ -208,13 +208,20 @@
             renderGame();
         }
 
+        // Helper function to convert number to emoji digits (3 digits)
+        function toEmojiNumber(num) {
+            const emojiDigits = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+            const str = String(num).padStart(3, '0');
+            return str.split('').map(d => emojiDigits[parseInt(d)]).join('');
+        }
+
         // Render the game board
         function renderGame() {
             gameBoard.innerHTML = '';
-            movesDisplay.textContent = gameState.moves;
+            movesDisplay.textContent = toEmojiNumber(gameState.moves);
             // Initialize matches to 0 if not set
             const currentMatches = gameState.matches || 0;
-            matchesDisplay.textContent = `${currentMatches}/${EMOJIS.length}`;  // Show progress like 2/8
+            matchesDisplay.textContent = `${toEmojiNumber(currentMatches)}/${toEmojiNumber(EMOJIS.length)}`;  // Show progress with emoji digits
 
             // Create a 4x4 grid
             gameBoard.style.gridTemplateColumns = `repeat(${BOARD_SIZE}, 1fr)`;
@@ -257,7 +264,7 @@
                 if (!response.ok) throw new Error('Flip failed');
                 
                 gameState = await response.json();
-                movesDisplay.textContent = gameState.moves;
+                movesDisplay.textContent = toEmojiNumber(gameState.moves);
 
                 // Check for match if two cards are flipped
                 if (gameState.flipped.length === 2) {
@@ -331,7 +338,7 @@
                         
                         // Update matches count after the animation
                         gameState.matches = (gameState.matches || 0) + 1;
-                        matchesDisplay.textContent = `${gameState.matches}/${EMOJIS.length}`;
+                        matchesDisplay.textContent = `${toEmojiNumber(gameState.matches)}/${toEmojiNumber(EMOJIS.length)}`;
                         
                         // Check for game over
                         if (gameState.matches === EMOJIS.length) {
@@ -357,7 +364,7 @@
                 
                 // Update moves
                 gameState.moves++;
-                movesDisplay.textContent = gameState.moves;
+                movesDisplay.textContent = toEmojiNumber(gameState.moves);
             }
         });
 

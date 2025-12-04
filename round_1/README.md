@@ -7,6 +7,10 @@ This is a small web application written in Go, located in the `round_1` director
 - The HTML file is embedded in the binary (using Go 1.22 `embed`)
 - Multi-stage Dockerfile using Chainguard images
 
+## GitHub workflow
+
+Build Image and scan it for vulnerabilities.
+
 ## Test
 
 Execute the commands from the round_1 directory.
