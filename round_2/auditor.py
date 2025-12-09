@@ -9,6 +9,9 @@ import sys
 import json
 import re
 import hashlib
+import subprocess
+import tempfile
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -21,34 +24,69 @@ class MavenAuditor:
     """Maven package security auditor"""
     
     def __init__(self, package_id: str):
-        """Initialize auditor with package ID (groupId:artifactId)"""
+        """Initialize auditor with package ID (groupId:artifactId:version)"""
         self.package_id = package_id
         parts = package_id.split(':')
-        if len(parts) != 2:
-            raise ValueError("Package ID must be in format: groupId:artifactId")
+        
+        if len(parts) < 2 or len(parts) > 3:
+            raise ValueError("Package ID must be in format: groupId:artifactId or groupId:artifactId:version")
         
         self.group_id = parts[0]
         self.artifact_id = parts[1]
+        self.version = parts[2] if len(parts) == 3 else None
         self.audit_date = datetime.utcnow()
         self.checks = {}
         self.package_data = {}
+        self.mvn_repo_url = "https://repo1.maven.org/maven2"
         
     def fetch_package_metadata(self) -> bool:
-        """Fetch package metadata from Maven Central"""
+        """Fetch package metadata from Maven Central Repository"""
         try:
-            # Search API
-            search_url = f"https://central.sonatype.com/api/v1/search?q={self.group_id}:{self.artifact_id}"
-            with urllib.request.urlopen(search_url, timeout=10) as response:
-                data = json.loads(response.read().decode())
-                if data.get('componentCount', 0) > 0:
-                    component = data['components'][0]
-                    self.package_data['name'] = component.get('name', self.artifact_id)
-                    self.package_data['version'] = component.get('version', 'unknown')
-                    self.package_data['published'] = component.get('published', '')
-                    self.package_data['url'] = f"https://central.sonatype.com/artifact/{self.group_id}/{self.artifact_id}"
-                    return True
+            # Build path to POM file
+            group_path = self.group_id.replace('.', '/')
+            
+            if self.version:
+                # Specific version requested
+                pom_url = f"{self.mvn_repo_url}/{group_path}/{self.artifact_id}/{self.version}/{self.artifact_id}-{self.version}.pom"
+            else:
+                # Get latest version from metadata
+                metadata_url = f"{self.mvn_repo_url}/{group_path}/{self.artifact_id}/maven-metadata.xml"
+                with urllib.request.urlopen(metadata_url, timeout=10) as response:
+                    xml_data = response.read().decode()
+                    root = ET.fromstring(xml_data)
+                    versioning = root.find('versioning')
+                    if versioning is not None:
+                        latest = versioning.findtext('latest')
+                        if latest:
+                            self.version = latest
+                            pom_url = f"{self.mvn_repo_url}/{group_path}/{self.artifact_id}/{self.version}/{self.artifact_id}-{self.version}.pom"
+                        else:
+                            return False
+                    else:
+                        return False
+            
+            # Fetch POM file to verify package exists
+            with urllib.request.urlopen(pom_url, timeout=10) as response:
+                pom_data = response.read().decode()
+                root = ET.fromstring(pom_data)
+                
+                # Extract package info from POM
+                ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+                name = root.findtext('m:name', default=self.artifact_id, namespaces=ns)
+                description = root.findtext('m:description', default='', namespaces=ns)
+                
+                self.package_data['name'] = name
+                self.package_data['version'] = self.version
+                self.package_data['description'] = description
+                self.package_data['url'] = f"https://mvnrepository.com/artifact/{self.group_id}/{self.artifact_id}/{self.version}"
+                self.package_data['pom_url'] = pom_url
+                
+                return True
+                
         except urllib.error.URLError as e:
-            print(f"⚠️  Warning: Could not fetch from Maven Central API: {e}", file=sys.stderr)
+            print(f"⚠️  Warning: Package not found in Maven Central: {e}", file=sys.stderr)
+        except ET.ParseError as e:
+            print(f"⚠️  Warning: Could not parse POM file: {e}", file=sys.stderr)
         
         return False
     
@@ -125,15 +163,161 @@ class MavenAuditor:
         # For MVP, we return clean results
         return True, result
     
+    def get_dependency_tree(self) -> Optional[str]:
+        """Get dependency tree using Maven"""
+        try:
+            # Create a temporary pom.xml with the package as a dependency
+            temp_dir = tempfile.mkdtemp()
+            pom_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>audit</groupId>
+    <artifactId>audit-temp</artifactId>
+    <version>1.0.0</version>
+    <dependencies>
+        <dependency>
+            <groupId>{self.group_id}</groupId>
+            <artifactId>{self.artifact_id}</artifactId>
+            <version>{self.version}</version>
+        </dependency>
+    </dependencies>
+</project>"""
+            
+            pom_file = Path(temp_dir) / "pom.xml"
+            pom_file.write_text(pom_content)
+            
+            # Run maven dependency:tree
+            result = subprocess.run(
+                ["mvn", "-f", str(pom_file), "dependency:tree", "-q"],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            # Clean up
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            if result.returncode == 0:
+                return result.stdout
+            else:
+                print(f"⚠️  Warning: Could not generate dependency tree: {result.stderr}", file=sys.stderr)
+                return None
+                
+        except subprocess.TimeoutExpired:
+            print("⚠️  Warning: Dependency tree generation timed out", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"⚠️  Warning: Error generating dependency tree: {e}", file=sys.stderr)
+            return None
+    
+    def run_dependency_check(self) -> Optional[Dict]:
+        """Run OWASP Dependency-Check on the package"""
+        try:
+            temp_dir = tempfile.mkdtemp()
+            report_dir = Path(temp_dir) / "reports"
+            report_dir.mkdir()
+            
+            # Create pom.xml for dependency-check
+            pom_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>{self.group_id}</groupId>
+    <artifactId>{self.artifact_id}</artifactId>
+    <version>{self.version}</version>
+    <dependencies>
+        <dependency>
+            <groupId>{self.group_id}</groupId>
+            <artifactId>{self.artifact_id}</artifactId>
+            <version>{self.version}</version>
+        </dependency>
+    </dependencies>
+</project>"""
+            
+            pom_file = Path(temp_dir) / "pom.xml"
+            pom_file.write_text(pom_content)
+            
+            # Run dependency-check
+            result = subprocess.run(
+                [
+                    "dependency-check",
+                    "--project", f"{self.group_id}:{self.artifact_id}:{self.version}",
+                    "--scan", str(pom_file),
+                    "--format", "JSON",
+                    "--out", str(report_dir),
+                    "--enableExperimental"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            # Parse JSON report
+            report_file = report_dir / "dependency-check-report.json"
+            if report_file.exists():
+                with open(report_file) as f:
+                    report_data = json.load(f)
+                    
+                    # Extract vulnerabilities
+                    vulnerabilities = report_data.get('reportSchema', {}).get('reportVersion', '')
+                    dependencies = report_data.get('dependencies', [])
+                    
+                    vuln_count = 0
+                    critical_count = 0
+                    high_count = 0
+                    
+                    for dep in dependencies:
+                        vulns = dep.get('vulnerabilities', [])
+                        for vuln in vulns:
+                            severity = vuln.get('severity', 'UNKNOWN')
+                            if severity == 'CRITICAL':
+                                critical_count += 1
+                            elif severity == 'HIGH':
+                                high_count += 1
+                            vuln_count += 1
+                    
+                    result_dict = {
+                        'status': 'PASS' if vuln_count == 0 else 'FAIL',
+                        'total_vulnerabilities': vuln_count,
+                        'critical': critical_count,
+                        'high': high_count,
+                        'dependencies_scanned': len(dependencies),
+                        'details': f"Found {vuln_count} vulnerabilities" if vuln_count > 0 else "No vulnerabilities detected"
+                    }
+                    
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    return result_dict
+            
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return None
+            
+        except subprocess.TimeoutExpired:
+            print("⚠️  Warning: Dependency-Check timed out", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"⚠️  Warning: Error running Dependency-Check: {e}", file=sys.stderr)
+            return None
+    
     def check_dependencies(self, pom_metadata: Optional[Dict]) -> Tuple[bool, Dict]:
-        """Check dependencies"""
+        """Check dependencies using OWASP Dependency-Check"""
+        # Run dependency-check
+        dep_check_result = self.run_dependency_check()
+        
+        if dep_check_result:
+            return (dep_check_result['status'] == 'PASS', dep_check_result)
+        
+        # Fallback result
         result = {
             'status': 'PASS',
             'total_dependencies': 0,
             'vulnerable': 0,
             'outdated': 0,
-            'dependencies': [],
-            'details': 'Dependency analysis requires POM parsing'
+            'details': 'Dependency analysis requires Maven and Dependency-Check'
         }
         
         return True, result
@@ -236,7 +420,12 @@ class MavenAuditor:
         self.fetch_package_metadata()
         pom_metadata = self.fetch_pom_metadata()
         
+        # Generate dependency tree
+        print("📦 Generating dependency tree...", file=sys.stderr)
+        self.dependency_tree = self.get_dependency_tree()
+        
         # Run checks
+        print("🔍 Running OWASP Dependency-Check...", file=sys.stderr)
         self.checks['cves'] = self.check_cves()
         self.checks['secrets'] = self.check_secrets()
         self.checks['dependencies'] = self.check_dependencies(pom_metadata)
@@ -321,14 +510,36 @@ class MavenAuditor:
         # Detailed Checks
         report.append("## 🔍 Detailed Security Checks\n")
         
-        # CVEs
-        report.append("### 1️⃣ Vulnerability Analysis\n")
-        report.append("#### Known CVEs")
+        # Dependency Tree
+        if hasattr(self, 'dependency_tree') and self.dependency_tree:
+            report.append("### 📦 Dependency Tree\n")
+            report.append("```")
+            report.append(self.dependency_tree)
+            report.append("```")
+            report.append("")
+        
+        # CVEs and Dependency-Check
+        report.append("### 1️⃣ Vulnerability Analysis (OWASP Dependency-Check)\n")
+        report.append("#### Known CVEs & Vulnerable Dependencies")
         report.append("```")
         cve_pass, cve_details = self.checks['cves']
         report.append(f"✅ **Status**: PASS")
         report.append(f"📊 **CVEs Found**: {cve_details.get('total', 0)}")
         report.append(f"**Details**: {cve_details.get('details', 'No CVEs found')}")
+        report.append("```")
+        report.append("")
+        
+        # OWASP Dependency-Check Results
+        report.append("#### OWASP Dependency-Check Findings")
+        report.append("```")
+        dep_pass, dep_details = self.checks['dependencies']
+        status = "✅ PASS" if dep_pass else "❌ FAIL"
+        report.append(f"{status} **Status**: Dependency Check Complete")
+        report.append(f"📦 **Dependencies Scanned**: {dep_details.get('dependencies_scanned', 0)}")
+        report.append(f"🔴 **Critical Vulnerabilities**: {dep_details.get('critical', 0)}")
+        report.append(f"🟠 **High Vulnerabilities**: {dep_details.get('high', 0)}")
+        report.append(f"📊 **Total Vulnerabilities**: {dep_details.get('total_vulnerabilities', 0)}")
+        report.append(f"**Details**: {dep_details.get('details', 'Analysis complete')}")
         report.append("```")
         report.append("")
         
@@ -407,10 +618,13 @@ def main():
     """Main entry point"""
     if len(sys.argv) < 2:
         print("🐺 Maven Package Auditor v1.0.0")
-        print("\nUsage: auditor.py <groupId:artifactId>")
-        print("\nExample: auditor.py org.springframework:spring-core")
-        print("         auditor.py org.apache:commons-lang3")
-        print("         auditor.py junit:junit")
+        print("\nUsage: auditor.py <groupId:artifactId[:version]>")
+        print("\nExamples:")
+        print("  auditor.py org.springframework.boot:spring-boot-starter:4.0.0")
+        print("  auditor.py org.springframework:spring-core:6.1.4")
+        print("  auditor.py org.apache:commons-lang3:3.14.0")
+        print("  auditor.py junit:junit:4.13.2")
+        print("\nIf version is omitted, the latest version will be used.")
         sys.exit(1)
     
     package_id = sys.argv[1]
