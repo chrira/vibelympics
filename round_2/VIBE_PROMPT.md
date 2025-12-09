@@ -141,10 +141,12 @@ Example for `org.springframework:spring-core`:
 - Search: `https://central.sonatype.com/api/v1/search?q=org.springframework:spring-core`
 - Metadata: `https://repo1.maven.org/maven2/org/springframework/spring-core/maven-metadata.xml`
 
-### Containerization - CLI Tool
+### Containerization - CLI Tool with Chainguard Images
+**REQUIREMENT**: Use Chainguard base images only! 🐺
+
 Minimal Dockerfile template for CLI:
 ```dockerfile
-FROM python:3.11-slim
+FROM cgr.dev/chainguard/python:latest
 WORKDIR /app
 COPY . .
 RUN pip install -r requirements.txt
@@ -152,12 +154,29 @@ ENTRYPOINT ["python", "auditor.py"]
 CMD ["--help"]
 ```
 
+**Why Chainguard Images?**
+- Minimal, distroless images (no shell, no package manager)
+- Hardened for security (SLSA provenance, signed with Sigstore)
+- Smaller attack surface
+- Demonstrates supply chain security commitment
+- Aligns with the tournament's security focus
+
+**Available Chainguard Images**:
+- `cgr.dev/chainguard/python:latest` - Python 3.11+
+- `cgr.dev/chainguard/node:latest` - Node.js
+- `cgr.dev/chainguard/java:latest` - Java
+- `cgr.dev/chainguard/go:latest` - Go
+- `cgr.dev/chainguard/ruby:latest` - Ruby
+- See https://images.chainguard.dev/ for full list
+
 Usage:
 ```bash
 docker build -t maven-auditor .
 docker run maven-auditor org.springframework:spring-core
 docker run maven-auditor org.apache:commons-lang3
 ```
+
+**Note**: Chainguard images are distroless, so some tools may not be available. Plan your dependencies accordingly.
 
 ### Implementation Guide: What to Check
 

@@ -1,3 +1,5 @@
 # Challenge 2
 
-The guidelines for this mysterious challenge will be revealed when Round 2 opens.
+docker build -t maven-auditor .
+docker run maven-auditor org.springframework:spring-core
+docker run maven-auditor org.apache:commons-lang3

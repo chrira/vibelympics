@@ -42,6 +42,11 @@ Software supply chain security
 3. **Make it relatively easy to run**:
    - For web apps: build container and run on port
    - For CLI apps: pass argument to container
+4. **Use Chainguard Images** 🐺
+   - Base Docker image MUST be from Chainguard (e.g., `cgr.dev/chainguard/python:latest`)
+   - No other base images (Alpine, Ubuntu, Debian, etc.)
+   - Demonstrates commitment to supply chain security
+   - Aligns with Chainguard's security-first philosophy
 
 ## Antirequirements (You Have Freedom Here)
 - Target any public package index or repository (PyPI, npm, Maven Central, etc)

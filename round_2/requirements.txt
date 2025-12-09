@@ -1,0 +1,21 @@
+# Maven Package Auditor - Requirements
+# Using only Python standard library - no external dependencies needed!
+# This keeps the container minimal and secure
+
+# Standard library modules used:
+# - sys: Command-line argument handling
+# - json: JSON parsing from Maven Central API
+# - re: Regex for secret detection patterns
+# - hashlib: Checksum verification
+# - datetime: Timestamp handling
+# - pathlib: File path handling
+# - typing: Type hints
+# - urllib: HTTP requests to Maven Central and NVD APIs
+# - xml.etree.ElementTree: POM file parsing
+
+# No external dependencies required for MVP!
+# This demonstrates security best practices:
+# - Minimal attack surface
+# - No supply chain risk from third-party packages
+# - Fast container builds
+# - Easy to audit and verify
