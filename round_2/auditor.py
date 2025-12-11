@@ -138,8 +138,8 @@ class MavenAuditor:
         }
         return True, result
     
-    def check_secrets(self, pom_url: Optional[str] = None) -> Tuple[bool, Dict]:
-        """Scan for hardcoded secrets"""
+    def check_secrets(self, jar_file: Path, pom_url: Optional[str] = None) -> Tuple[bool, Dict]:
+        """Scan for hardcoded secrets using TruffleHog"""
         result = {
             'status': 'PASS',
             'api_keys': 0,
@@ -147,21 +147,93 @@ class MavenAuditor:
             'tokens': 0,
             'aws_keys': 0,
             'private_keys': 0,
-            'details': 'No secrets detected in available source'
+            'secrets_found': [],
+            'details': 'No secrets detected'
         }
         
-        # Regex patterns for secrets
-        patterns = {
-            'aws_keys': r'AKIA[0-9A-Z]{16}',
-            'api_keys': r'api[_-]?key[_-]?[=:]\s*["\'][^"\']{20,}["\']',
-            'passwords': r'password[_-]?[=:]\s*["\'][^"\']+["\']',
-            'tokens': r'token[_-]?[=:]\s*["\'][^"\']{20,}["\']',
-            'private_keys': r'-----BEGIN .* PRIVATE KEY-----'
-        }
-        
-        # In a real implementation, we would download and scan the source
-        # For MVP, we return clean results
-        return True, result
+        # Use JAR file if available, otherwise return clean results
+        try:
+            if not jar_file or not jar_file.exists():
+                return False, {
+                    'status': 'FAIL',
+                    'details': 'JAR file not found for secret verification'
+                }
+
+            print(f"🔍 Scanning for secrets with TruffleHog: {jar_file}", file=sys.stderr)
+            
+            # Run TruffleHog scan on the JAR file
+            result_obj = subprocess.run(
+                [
+                    "trufflehog3",
+                    "filesystem",
+                    str(jar_file),
+                    "--json"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            # Parse TruffleHog JSON output
+            secrets_found = []
+            secret_types = {
+                'api_keys': 0,
+                'passwords': 0,
+                'tokens': 0,
+                'aws_keys': 0,
+                'private_keys': 0
+            }
+            
+            if result_obj.stdout:
+                for line in result_obj.stdout.strip().split('\n'):
+                    if not line:
+                        continue
+                    try:
+                        secret_data = json.loads(line)
+                        secret_type = secret_data.get('type', 'unknown')
+                        raw_secret = secret_data.get('raw', '')
+                        
+                        # Categorize secret types
+                        if 'aws' in secret_type.lower():
+                            secret_types['aws_keys'] += 1
+                        elif 'api' in secret_type.lower() or 'key' in secret_type.lower():
+                            secret_types['api_keys'] += 1
+                        elif 'password' in secret_type.lower():
+                            secret_types['passwords'] += 1
+                        elif 'token' in secret_type.lower():
+                            secret_types['tokens'] += 1
+                        elif 'private' in secret_type.lower():
+                            secret_types['private_keys'] += 1
+                        
+                        secrets_found.append({
+                            'type': secret_type,
+                            'location': secret_data.get('filename', 'unknown'),
+                            'line': secret_data.get('line_number', 'unknown')
+                        })
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Update result with findings
+            result.update(secret_types)
+            result['secrets_found'] = secrets_found
+            total_secrets = sum(secret_types.values())
+            
+            if total_secrets > 0:
+                result['status'] = 'FAIL'
+                result['details'] = f"Found {total_secrets} secret(s) in JAR file"
+                return False, result
+            else:
+                result['details'] = 'No secrets detected in JAR file'
+                return True, result
+            
+        except subprocess.TimeoutExpired:
+            print("⚠️  Warning: TruffleHog scan timed out", file=sys.stderr)
+            result['details'] = 'Secret scan timed out'
+            return True, result
+        except Exception as e:
+            print(f"⚠️  Warning: Error running TruffleHog: {e}", file=sys.stderr)
+            result['details'] = f'Error scanning for secrets: {str(e)}'
+            return True, result
     
     def get_dependency_tree(self) -> Optional[str]:
         """Get dependency tree using Maven"""
@@ -543,7 +615,7 @@ class MavenAuditor:
         # Run checks
         print("🔍 Running Vulnerability Scan...", file=sys.stderr)
         self.checks['cves'] = self.check_cves()
-        self.checks['secrets'] = self.check_secrets()
+        self.checks['secrets'] = self.check_secrets(self.jar_file)
         self.checks['dependencies'] = self.check_dependencies(pom_metadata)
         self.checks['signatures'] = self.check_signatures()
         self.checks['maintainer'] = self.check_maintainer()

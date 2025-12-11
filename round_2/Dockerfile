@@ -21,6 +21,10 @@ RUN mkdir -p /tmp/grype && \
     cd / && \
     rm -rf /tmp/grype
 
+# Install TruffleHog - Secret and credential scanner
+# Detects API keys, tokens, credentials, and other sensitive data
+RUN pip install --no-cache-dir truffleHog3
+
 USER nonroot
 
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
