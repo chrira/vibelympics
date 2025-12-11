@@ -49,33 +49,68 @@ Examples:
   auditor.py junit:junit
 ```
 
-## Features
+## 🔍 Comprehensive Security Checks
 
-✅ **Security Checks**:
-- **OWASP Dependency-Check** integration for comprehensive vulnerability scanning
-- **Dependency tree analysis** showing all transitive dependencies
-- Known CVEs detection
-- Hardcoded secrets scanning
-- Dependency vulnerability analysis
-- Package signature verification
-- Maintainer verification
-- Repository activity analysis
-- Code quality assessment
-- Metadata integrity validation
+### 🛡️ Vulnerability Analysis
+- **CVE Detection**: Scans for known vulnerabilities in dependencies using Grype
+- **Dependency Analysis**: Deep inspection of all transitive dependencies for security issues
+- **Version Auditing**: Identifies outdated or deprecated package versions
+- **Vulnerability Severity Scoring**: Prioritizes findings based on CVSS scores
 
-✅ **Output**:
-- Beautiful markdown reports with emojis
-- Risk scoring (0-100)
-- Detailed findings and recommendations
-- Timestamped audit metadata
-- Version information and age analysis
-- Newer version availability
+### 🔐 Secrets & Credentials
+- **Hardcoded Secrets**: Detects API keys, passwords, and sensitive data using TruffleHog
+- **Credential Patterns**: Identifies common credential patterns and hashes
+- **Environment Variables**: Checks for exposed sensitive configuration
 
-✅ **Security**:
-- Chainguard Python base image (minimal, distroless)
-- Trivy vulnerability scanner (fast, efficient)
-- SLSA provenance and Sigstore signatures
-- Direct JAR download from Maven Central
+### 📦 Package Integrity
+- **Signature Verification**: Validates JAR signing and certificates
+- **Checksum Validation**: Ensures package integrity with SHA-1/SHA-256 hashes
+- **Metadata Verification**: Validates POM metadata and project information
+- **Provenance**: Tracks package origin and build information
+
+### 🔄 Maintenance & Activity
+- **Version History**: Analyzes release frequency and version patterns
+- **Maintainer Activity**: Checks project maintenance status and responsiveness
+- **Community Health**: Evaluates project popularity and community support
+- **Deprecation Status**: Identifies deprecated or archived projects
+
+## 🚀 Chainguard Integration
+
+### 🐺 Why Chainguard?
+- **Minimal Attack Surface**: Uses Chainguard's distroless Python base image
+- **Supply Chain Security**: Built with SLSA Level 3 compliance
+- **Vulnerability Scanning**: Integrated Grype for comprehensive CVE detection
+- **Immutable Containers**: Ensures reproducible and verifiable builds
+- **SBOM Generation**: Automatic Software Bill of Materials for transparency
+
+### 🔒 Security Benefits
+- **Reduced Bloat**: Minimal container size (~50MB) with only essential components
+- **No Shell Access**: Eliminates common attack vectors
+- **Immutable Filesystem**: Prevents runtime modifications
+- **Distroless**: No package manager or shell for attackers to exploit
+- **FIPS Compliance**: Meets strict security standards
+
+### 🛠️ Built with Security in Mind
+- **Secrets Detection**: TruffleHog integration for finding exposed credentials
+- **Dependency Analysis**: Complete dependency tree visualization
+- **Version Auditing**: Identifies outdated or vulnerable dependencies
+- **Comprehensive Reporting**: Detailed markdown reports with actionable insights
+
+## 📊 Output Features
+
+### 📝 Report Includes:
+- **Executive Summary**: Quick overview of findings
+- **Risk Assessment**: Overall security score (0-100)
+- **Vulnerability Details**: CVE information and remediation steps
+- **Dependency Analysis**: Complete dependency tree with version information
+- **Version Insights**: Package age, latest version, and update recommendations
+- **Maintenance Status**: Project activity and maintenance indicators
+- **Actionable Recommendations**: Clear steps to improve security
+
+### 📂 Report Formats
+- **Markdown**: Human-readable format with emojis and formatting
+- **Console Output**: Real-time feedback during execution
+- **File Export**: Save reports for documentation and compliance
 
 ## Trivy Vulnerability Scanning
 
