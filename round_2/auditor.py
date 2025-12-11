@@ -12,7 +12,7 @@ import hashlib
 import subprocess
 import tempfile
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import urllib.request
@@ -34,7 +34,7 @@ class MavenAuditor:
         self.group_id = parts[0]
         self.artifact_id = parts[1]
         self.version = parts[2] if len(parts) == 3 else None
-        self.audit_date = datetime.utcnow()
+        self.audit_date = datetime.now(timezone.utc).replace(tzinfo=None)  # Using timezone-aware datetime
         self.checks = {}
         self.package_data = {}
         self.mvn_repo_url = "https://repo1.maven.org/maven2"
@@ -538,7 +538,7 @@ class MavenAuditor:
     
     def calculate_package_age(self, pom_metadata: Optional[Dict]) -> Dict:
         """Calculate package age and version information using Maven Central data"""
-        from datetime import datetime
+        from datetime import datetime, timezone
         
         result = {
             'first_release': 'Unknown',
@@ -583,7 +583,7 @@ class MavenAuditor:
             # Calculate current version age
             if current_timestamp:
                 try:
-                    release_date = datetime.fromtimestamp(current_timestamp / 1000)
+                    release_date = datetime.fromtimestamp(current_timestamp / 1000, tz=timezone.utc).replace(tzinfo=None)
                     days_old = (datetime.now() - release_date).days
                     
                     if days_old < 30:

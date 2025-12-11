@@ -1,4 +1,4 @@
-name: Test and Build
+name: Maven Package Auditor
 
 permissions:
   contents: read
@@ -8,44 +8,20 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'round_1/**/*.go'
-      - 'round_1/Dockerfile'
+      - 'round_2/**/*.py'
+      - 'round_2/Dockerfile'
       - '.github/workflows/docker-build.yml'
   pull_request:
     branches: [ main ]
     paths:
-      - 'round_1/**/*.go'
-      - 'round_1/Dockerfile'
+      - 'round_2/**/*.py'
+      - 'round_2/Dockerfile'
       - '.github/workflows/docker-build.yml'
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-      
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: '^1.20'
-        
-    - name: Run tests
-      working-directory: ./round_1
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-      
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./round_1/coverage.txt
-        fail_ci_if_error: true
-
   build:
-    needs: test
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -74,8 +50,8 @@ jobs:
       uses: docker/build-push-action@v4
       id: build
       with:
-        context: round_1/
-        file: round_1/Dockerfile
+        context: round_2/
+        file: round_2/Dockerfile
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
