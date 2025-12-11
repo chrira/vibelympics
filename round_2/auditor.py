@@ -249,53 +249,6 @@ class MavenAuditor:
             result['details'] = f'Error scanning for secrets: {str(e)}'
             return True, result
     
-    def get_dependency_tree(self) -> Optional[str]:
-        """Get dependency tree using Maven"""
-        try:
-            # Create a temporary pom.xml with the package as a dependency
-            temp_dir = tempfile.mkdtemp()
-            pom_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>audit</groupId>
-    <artifactId>audit-temp</artifactId>
-    <version>1.0.0</version>
-    <dependencies>
-        <dependency>
-            <groupId>{self.group_id}</groupId>
-            <artifactId>{self.artifact_id}</artifactId>
-            <version>{self.version}</version>
-        </dependency>
-    </dependencies>
-</project>"""
-            
-            pom_file = Path(temp_dir) / "pom.xml"
-            pom_file.write_text(pom_content)
-            
-            # Run maven dependency:tree
-            result = subprocess.run(
-                ["mvn", "-f", str(pom_file), "dependency:tree", "-q"],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            # Clean up
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            
-            if result.returncode == 0:
-                return result.stdout
-            else:
-                print(f"⚠️  Warning: Could not generate dependency tree: {result.stderr}", file=sys.stderr)
-                return None
-                
-        except subprocess.TimeoutExpired:
-            print("⚠️  Warning: Dependency tree generation timed out", file=sys.stderr)
-            return None
-        except Exception as e:
             print(f"⚠️  Warning: Error generating dependency tree: {e}", file=sys.stderr)
             return None
     
@@ -703,10 +656,6 @@ class MavenAuditor:
         print("📥 Downloading JAR from Maven Central...", file=sys.stderr)
         self.jar_file = self.download_jar_from_maven()
         
-        # Generate dependency tree
-        print("📦 Generating dependency tree...", file=sys.stderr)
-        self.dependency_tree = self.get_dependency_tree()
-        
         # Run checks
         print("🔍 Running Vulnerability Scan...", file=sys.stderr)
         self.checks['cves'] = self.check_cves()
@@ -800,13 +749,6 @@ class MavenAuditor:
         # Detailed Checks
         report.append("## 🔍 Detailed Security Checks\n")
         
-        # Dependency Tree
-        if hasattr(self, 'dependency_tree') and self.dependency_tree:
-            report.append("### 📦 Dependency Tree\n")
-            report.append("```")
-            report.append(self.dependency_tree)
-            report.append("```")
-            report.append("")
         
         # CVEs and Vulnerability Scan
         report.append("### 1️⃣ Vulnerability Analysis (Grype Scan)\n")
