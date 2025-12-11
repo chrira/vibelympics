@@ -861,35 +861,60 @@ class MavenAuditor:
         return str(filepath)
 
 
+def print_help():
+    """Print help message"""
+    print("🐺 Maven Package Auditor v1.0.0")
+    print("\nA security-focused CLI tool for auditing Maven packages")
+    print("\nUsage: auditor.py <groupId:artifactId[:version]> [options]")
+    print("\nArguments:")
+    print("  <groupId:artifactId[:version]>  Maven package coordinates (version is optional)")
+    print("\nOptions:")
+    print("  -h, --help     Show this help message and exit")
+    print("  -o, --output   Output directory for the report (default: current directory)")
+    print("\nExamples:")
+    print("  auditor.py org.springframework.boot:spring-boot-starter:4.0.0")
+    print("  auditor.py org.springframework:spring-core:6.1.4 -o ./reports")
+    print("  auditor.py org.apache:commons-lang3:3.14.0 --output /tmp")
+    print("  auditor.py junit:junit:4.13.2")
+    print("\nIf version is omitted, the latest version will be used.")
+
+
 def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("🐺 Maven Package Auditor v1.0.0")
-        print("\nUsage: auditor.py <groupId:artifactId[:version]>")
-        print("\nExamples:")
-        print("  auditor.py org.springframework.boot:spring-boot-starter:4.0.0")
-        print("  auditor.py org.springframework:spring-core:6.1.4")
-        print("  auditor.py org.apache:commons-lang3:3.14.0")
-        print("  auditor.py junit:junit:4.13.2")
-        print("\nIf version is omitted, the latest version will be used.")
-        sys.exit(1)
+    import argparse
     
-    package_id = sys.argv[1]
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Maven Package Auditor - Security-focused Maven package analysis tool',
+                                   add_help=False)
+    parser.add_argument('package', nargs='?', help='Maven package coordinates (groupId:artifactId[:version])')
+    parser.add_argument('-o', '--output', default='.', help='Output directory for the report')
+    parser.add_argument('-h', '--help', action='store_true', help='Show this help message and exit')
+    
+    # Parse arguments
+    if len(sys.argv) == 1:
+        print_help()
+        sys.exit(1)
+        
+    args = parser.parse_args()
+    
+    if args.help or not args.package:
+        print_help()
+        sys.exit(0)
     
     try:
         # Create auditor
-        auditor = MavenAuditor(package_id)
+        auditor = MavenAuditor(args.package)
         
         # Run audit
-        print(f"🔍 Auditing package: {package_id}", file=sys.stderr)
+        print(f"🔍 Auditing package: {args.package}", file=sys.stderr)
         auditor.run_all_checks()
         
         # Generate and print report
         report = auditor.generate_markdown_report()
         print(report)
         
-        # Save report
-        saved_path = auditor.save_report()
+        # Save report to specified output directory
+        saved_path = auditor.save_report(args.output)
         print(f"\n📄 Report saved to: {saved_path}", file=sys.stderr)
         
     except ValueError as e:
@@ -897,6 +922,8 @@ def main():
         sys.exit(1)
     except Exception as e:
         print(f"❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 

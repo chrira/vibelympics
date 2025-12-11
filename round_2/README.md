@@ -9,23 +9,44 @@ A security-focused CLI tool for auditing Maven packages from Maven Central Repos
 docker build -t maven-auditor .
 ```
 
+### Get Help
+```bash
+# Show help message
+docker run maven-auditor --help
+```
+
 ### Run an Audit
 ```bash
 # Audit apache maven (specific version)
 # https://mvnrepository.com/artifact/org.apache.maven/maven-core/3.0.4
 docker run maven-auditor org.apache.maven:maven-core:3.0.4
 
-# Audit Spring Boot Starter (specific version)
-docker run maven-auditor org.springframework.boot:spring-boot-starter:4.0.0
+# Basic usage (saves report to current directory)
+docker run -v $(pwd):/app maven-auditor org.springframework:spring-core:6.1.4
 
-# Audit Spring Framework Core
-docker run maven-auditor org.springframework:spring-core:6.1.4
+# Specify output directory for the report
+docker run -v $(pwd)/reports:/app/reports maven-auditor org.apache:commons-lang3:3.14.0 -o /app/reports
 
-# Audit Apache Commons Lang
-docker run maven-auditor org.apache:commons-lang3:3.14.0
+# Audit latest version (version can be omitted)
+docker run -v $(pwd):/app maven-auditor junit:junit
+```
 
-# Audit JUnit (latest version)
-docker run maven-auditor junit:junit
+### Command Line Options
+```
+Usage: auditor.py <groupId:artifactId[:version]> [options]
+
+Arguments:
+  <groupId:artifactId[:version]>  Maven package coordinates (version is optional)
+
+Options:
+  -h, --help     Show this help message and exit
+  -o, --output   Output directory for the report (default: current directory)
+
+Examples:
+  auditor.py org.springframework.boot:spring-boot-starter:4.0.0
+  auditor.py org.springframework:spring-core:6.1.4 -o ./reports
+  auditor.py org.apache:commons-lang3:3.14.0 --output /tmp
+  auditor.py junit:junit
 ```
 
 ## Features
@@ -47,6 +68,8 @@ docker run maven-auditor junit:junit
 - Risk scoring (0-100)
 - Detailed findings and recommendations
 - Timestamped audit metadata
+- Version information and age analysis
+- Newer version availability
 
 ✅ **Security**:
 - Chainguard Python base image (minimal, distroless)
