@@ -314,7 +314,7 @@ class MavenAuditor:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=600
             )
             
             if result.returncode in [0, 1]:  # 0 = no vulns, 1 = vulns found
