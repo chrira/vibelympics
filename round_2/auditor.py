@@ -213,94 +213,121 @@ class MavenAuditor:
             print(f"⚠️  Warning: Error generating dependency tree: {e}", file=sys.stderr)
             return None
     
-    def run_dependency_check(self) -> Optional[Dict]:
-        """Run OWASP Dependency-Check on the package"""
+    def download_jar_from_maven(self) -> Optional[Path]:
+        """Download the JAR file from Maven Central Repository"""
         try:
-            temp_dir = tempfile.mkdtemp()
-            report_dir = Path(temp_dir) / "reports"
-            report_dir.mkdir()
+            group_path = self.group_id.replace('.', '/')
+            jar_url = f"{self.mvn_repo_url}/{group_path}/{self.artifact_id}/{self.version}/{self.artifact_id}-{self.version}.jar"
             
-            # Create pom.xml for dependency-check
-            pom_content = f"""<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>{self.group_id}</groupId>
-    <artifactId>{self.artifact_id}</artifactId>
-    <version>{self.version}</version>
-    <dependencies>
-        <dependency>
-            <groupId>{self.group_id}</groupId>
-            <artifactId>{self.artifact_id}</artifactId>
-            <version>{self.version}</version>
-        </dependency>
-    </dependencies>
-</project>"""
+            temp_dir = Path(tempfile.mkdtemp())
+            jar_file = temp_dir / f"{self.artifact_id}-{self.version}.jar"
             
-            pom_file = Path(temp_dir) / "pom.xml"
-            pom_file.write_text(pom_content)
+            print(f"📥 Downloading JAR from Maven Central: {jar_url}", file=sys.stderr)
             
-            # Run dependency-check
+            with urllib.request.urlopen(jar_url, timeout=30) as response:
+                jar_file.write_bytes(response.read())
+            
+            print(f"✅ JAR downloaded successfully: {jar_file}", file=sys.stderr)
+            return jar_file
+            
+        except urllib.error.URLError as e:
+            print(f"⚠️  Warning: Could not download JAR: {e}", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(f"⚠️  Warning: Error downloading JAR: {e}", file=sys.stderr)
+            return None
+    
+    def run_grype_scan(self, jar_file: Path) -> Optional[Dict]:
+        """Run Grype vulnerability scanner on the JAR file"""
+        try:
+            # Run grype scan on the JAR file
+            # Grype is optimized for scanning artifacts and is faster than Trivy for JARs
             result = subprocess.run(
                 [
-                    "dependency-check",
-                    "--project", f"{self.group_id}:{self.artifact_id}:{self.version}",
-                    "--scan", str(pom_file),
-                    "--format", "JSON",
-                    "--out", str(report_dir),
-                    "--enableExperimental"
+                    "grype",
+                    str(jar_file),
+                    "--output", "json"
                 ],
                 capture_output=True,
                 text=True,
                 timeout=120
             )
             
-            # Parse JSON report
-            report_file = report_dir / "dependency-check-report.json"
-            if report_file.exists():
-                with open(report_file) as f:
-                    report_data = json.load(f)
-                    
-                    # Extract vulnerabilities
-                    vulnerabilities = report_data.get('reportSchema', {}).get('reportVersion', '')
-                    dependencies = report_data.get('dependencies', [])
+            if result.returncode in [0, 1]:  # 0 = no vulns, 1 = vulns found
+                try:
+                    report_data = json.loads(result.stdout)
                     
                     vuln_count = 0
                     critical_count = 0
                     high_count = 0
+                    vulnerabilities = []
                     
-                    for dep in dependencies:
-                        vulns = dep.get('vulnerabilities', [])
-                        for vuln in vulns:
-                            severity = vuln.get('severity', 'UNKNOWN')
-                            if severity == 'CRITICAL':
-                                critical_count += 1
-                            elif severity == 'HIGH':
-                                high_count += 1
-                            vuln_count += 1
+                    # Parse Grype JSON output
+                    matches = report_data.get('matches', [])
+                    for match in matches:
+                        vuln = match.get('vulnerability', {})
+                        severity = vuln.get('severity', 'UNKNOWN').upper()
+                        cve_id = vuln.get('id', 'unknown')
+                        title = vuln.get('description', '')
+                        
+                        if severity == 'CRITICAL':
+                            critical_count += 1
+                        elif severity == 'HIGH':
+                            high_count += 1
+                        vuln_count += 1
+                        vulnerabilities.append({
+                            'id': cve_id,
+                            'severity': severity,
+                            'title': title
+                        })
                     
                     result_dict = {
                         'status': 'PASS' if vuln_count == 0 else 'FAIL',
                         'total_vulnerabilities': vuln_count,
                         'critical': critical_count,
                         'high': high_count,
-                        'dependencies_scanned': len(dependencies),
+                        'vulnerabilities': vulnerabilities,
                         'details': f"Found {vuln_count} vulnerabilities" if vuln_count > 0 else "No vulnerabilities detected"
                     }
                     
-                    shutil.rmtree(temp_dir, ignore_errors=True)
                     return result_dict
-            
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            return None
+                except json.JSONDecodeError:
+                    print(f"⚠️  Warning: Could not parse Grype output", file=sys.stderr)
+                    return None
+            else:
+                print(f"⚠️  Warning: Grype scan failed with return code {result.returncode}", file=sys.stderr)
+                return None
             
         except subprocess.TimeoutExpired:
-            print("⚠️  Warning: Dependency-Check timed out", file=sys.stderr)
+            print("⚠️  Warning: Grype scan timed out", file=sys.stderr)
             return None
         except Exception as e:
-            print(f"⚠️  Warning: Error running Dependency-Check: {e}", file=sys.stderr)
+            print(f"⚠️  Warning: Error running Grype: {e}", file=sys.stderr)
+            return None
+    
+    def run_dependency_check(self) -> Optional[Dict]:
+        """Run vulnerability scan on the package using Grype"""
+        temp_dir = None
+        try:
+            # Download JAR from Maven Central
+            jar_file = self.download_jar_from_maven()
+            if not jar_file:
+                return None
+            
+            temp_dir = jar_file.parent
+            
+            # Run Grype scan
+            result = self.run_grype_scan(jar_file)
+            
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            return result
+            
+        except Exception as e:
+            print(f"⚠️  Warning: Error in dependency check: {e}", file=sys.stderr)
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
             return None
     
     def check_dependencies(self, pom_metadata: Optional[Dict]) -> Tuple[bool, Dict]:
@@ -420,12 +447,16 @@ class MavenAuditor:
         self.fetch_package_metadata()
         pom_metadata = self.fetch_pom_metadata()
         
+        # Download JAR first before any checks
+        print("📥 Downloading JAR from Maven Central...", file=sys.stderr)
+        self.jar_file = self.download_jar_from_maven()
+        
         # Generate dependency tree
         print("📦 Generating dependency tree...", file=sys.stderr)
         self.dependency_tree = self.get_dependency_tree()
         
         # Run checks
-        print("🔍 Running OWASP Dependency-Check...", file=sys.stderr)
+        print("🔍 Running Vulnerability Scan...", file=sys.stderr)
         self.checks['cves'] = self.check_cves()
         self.checks['secrets'] = self.check_secrets()
         self.checks['dependencies'] = self.check_dependencies(pom_metadata)
@@ -518,8 +549,8 @@ class MavenAuditor:
             report.append("```")
             report.append("")
         
-        # CVEs and Dependency-Check
-        report.append("### 1️⃣ Vulnerability Analysis (OWASP Dependency-Check)\n")
+        # CVEs and Vulnerability Scan
+        report.append("### 1️⃣ Vulnerability Analysis (Grype Scan)\n")
         report.append("#### Known CVEs & Vulnerable Dependencies")
         report.append("```")
         cve_pass, cve_details = self.checks['cves']
@@ -529,18 +560,29 @@ class MavenAuditor:
         report.append("```")
         report.append("")
         
-        # OWASP Dependency-Check Results
-        report.append("#### OWASP Dependency-Check Findings")
+        # Vulnerability Scan Results
+        report.append("#### Vulnerability Scan Findings")
         report.append("```")
         dep_pass, dep_details = self.checks['dependencies']
         status = "✅ PASS" if dep_pass else "❌ FAIL"
-        report.append(f"{status} **Status**: Dependency Check Complete")
-        report.append(f"📦 **Dependencies Scanned**: {dep_details.get('dependencies_scanned', 0)}")
-        report.append(f"🔴 **Critical Vulnerabilities**: {dep_details.get('critical', 0)}")
-        report.append(f"🟠 **High Vulnerabilities**: {dep_details.get('high', 0)}")
-        report.append(f"📊 **Total Vulnerabilities**: {dep_details.get('total_vulnerabilities', 0)}")
+        report.append(f"{status} **Status**: Vulnerability Scan Complete")
+        report.append(f"� **Critical Vulnerabilities**: {dep_details.get('critical', 0)}")
+        report.append(f"� **High Vulnerabilities**: {dep_details.get('high', 0)}")
+        report.append(f"� **Total Vulnerabilities**: {dep_details.get('total_vulnerabilities', 0)}")
         report.append(f"**Details**: {dep_details.get('details', 'Analysis complete')}")
         report.append("```")
+        
+        # List found vulnerabilities if any
+        if dep_details.get('total_vulnerabilities', 0) > 0 and dep_details.get('vulnerabilities'):
+            report.append("")
+            report.append("#### Found Vulnerabilities")
+            report.append("")
+            for vuln in dep_details.get('vulnerabilities', []):
+                cve_id = vuln.get('id', 'unknown')
+                severity = vuln.get('severity', 'UNKNOWN')
+                title = vuln.get('title', 'No description')
+                report.append(f"- **{cve_id}** [{severity}]: {title}")
+        
         report.append("")
         
         # Secrets

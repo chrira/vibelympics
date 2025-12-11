@@ -24,7 +24,8 @@ docker run maven-auditor org.apache:commons-lang3:3.14.0
 docker run maven-auditor junit:junit
 
 # Audit apache maven (specific version)
-docker run maven-auditor org.apache.maven:maven:3.0.4
+# https://mvnrepository.com/artifact/org.apache.maven/maven-core/3.0.4
+docker run maven-auditor org.apache.maven:maven-core:3.0.4
 ```
 
 ## Features
@@ -48,20 +49,21 @@ docker run maven-auditor org.apache.maven:maven:3.0.4
 - Timestamped audit metadata
 
 ✅ **Security**:
-- Chainguard Maven base image with Java runtime
-- OWASP Dependency-Check v8.4.2 integrated
+- Chainguard Python base image (minimal, distroless)
+- Trivy vulnerability scanner (fast, efficient)
 - SLSA provenance and Sigstore signatures
-- Maven for dependency tree analysis
+- Direct JAR download from Maven Central
 
-## OWASP Dependency-Check Integration
+## Trivy Vulnerability Scanning
 
-The auditor includes **OWASP Dependency-Check**, an industry-standard SCA (Software Composition Analysis) tool that:
+The auditor uses **Trivy**, a fast and efficient vulnerability scanner that:
 
+- Downloads JAR files directly from Maven Central Repository
 - Scans dependencies against the NVD (National Vulnerability Database)
-- Identifies known vulnerable components
-- Analyzes evidence to identify CPE (Common Platform Enumeration)
-- Maps to CVE entries
-- Generates detailed vulnerability reports
+- Identifies known vulnerable components and CVEs
+- Provides detailed vulnerability reports with severity levels
+- Runs 10-20x faster than traditional SCA tools
+- Detects vulnerabilities like CVE-2021-26291 (Apache Commons Text RCE)
 
 ### Dependency Tree Analysis
 

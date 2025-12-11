@@ -1,22 +1,35 @@
-# 🐺 Maven Package Auditor - Chainguard-based Container
-# Using Chainguard base image with Java and Maven for dependency analysis
+# 🐺 Maven Package Auditor - Alpine-based Container
+# Using Alpine Linux for lightweight image with Java, Maven, and security tools
 
-FROM cgr.dev/chainguard/python:latest-dev
+FROM alpine:latest
 
 USER root
 
-# Install OWASP Dependency-Check
-# Download and install dependency-check CLI
-RUN mkdir -p /opt/dependency-check && \
-    cd /opt/dependency-check && \
-    wget -q https://github.com/dependency-check/DependencyCheck/releases/download/v12.1.9/dependency-check-12.1.9-release.zip && \
-    unzip -q dependency-check-12.1.9-release.zip && \
-    rm dependency-check-12.1.9-release.zip && \
-    chmod +x dependency-check/bin/dependency-check.sh && \
-    mkdir -p /usr/local/bin/ && \
-    ln -s /opt/dependency-check/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+# Install Python, Java, Maven, and other required tools
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    openjdk17-jdk \
+    maven \
+    wget \
+    tar \
+    gzip
 
-USER nonroot
+# Install Grype - Fast vulnerability scanner optimized for artifacts
+# Download Grype binary directly from GitHub releases
+RUN mkdir -p /tmp/grype && \
+    cd /tmp/grype && \
+    wget -q https://github.com/anchore/grype/releases/download/v0.104.2/grype_0.104.2_linux_amd64.tar.gz && \
+    tar xzf grype_0.104.2_linux_amd64.tar.gz && \
+    mv grype /usr/local/bin/ && \
+    chmod +x /usr/local/bin/grype && \
+    cd / && \
+    rm -rf /tmp/grype
+
+# Create non-root user for security
+RUN addgroup -S auditor && adduser -S auditor -G auditor
+
+USER auditor
 
 # Set working directory
 WORKDIR /app
@@ -36,6 +49,6 @@ CMD ["--help"]
 
 # Labels for container metadata
 LABEL org.opencontainers.image.title="Maven Package Auditor"
-LABEL org.opencontainers.image.description="Security-focused CLI tool for auditing Maven packages with OWASP Dependency-Check"
+LABEL org.opencontainers.image.description="Security-focused CLI tool for auditing Maven packages with Grype vulnerability scanning"
 LABEL org.opencontainers.image.vendor="Chainguard"
 LABEL org.opencontainers.image.version="2.0.0"
