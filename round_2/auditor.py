@@ -213,6 +213,25 @@ class MavenAuditor:
             print(f"⚠️  Warning: Error generating dependency tree: {e}", file=sys.stderr)
             return None
     
+    def get_jar_size(self, jar_file: Path) -> str:
+        """Get JAR file size in human-readable format"""
+        try:
+            if not jar_file or not jar_file.exists():
+                return "Unknown"
+            
+            size_bytes = jar_file.stat().st_size
+            
+            # Convert to human-readable format
+            for unit in ['B', 'KB', 'MB', 'GB']:
+                if size_bytes < 1024.0:
+                    return f"{size_bytes:.2f} {unit}"
+                size_bytes /= 1024.0
+            
+            return f"{size_bytes:.2f} TB"
+        except Exception as e:
+            print(f"⚠️  Warning: Could not get JAR size: {e}", file=sys.stderr)
+            return "Unknown"
+    
     def download_jar_from_maven(self) -> Optional[Path]:
         """Download the JAR file from Maven Central Repository"""
         try:
@@ -227,7 +246,13 @@ class MavenAuditor:
             with urllib.request.urlopen(jar_url, timeout=30) as response:
                 jar_file.write_bytes(response.read())
             
-            print(f"✅ JAR downloaded successfully: {jar_file}", file=sys.stderr)
+            # Get JAR file size
+            jar_size = self.get_jar_size(jar_file)
+            print(f"✅ JAR downloaded successfully: {jar_file} ({jar_size})", file=sys.stderr)
+            
+            # Store JAR size in package data
+            self.package_data['jar_size'] = jar_size
+            
             return jar_file
             
         except urllib.error.URLError as e:
@@ -307,27 +332,18 @@ class MavenAuditor:
     
     def run_dependency_check(self) -> Optional[Dict]:
         """Run vulnerability scan on the package using Grype"""
-        temp_dir = None
         try:
-            # Download JAR from Maven Central
-            jar_file = self.download_jar_from_maven()
-            if not jar_file:
+            # Use the JAR file that was already downloaded in run_all_checks()
+            if not hasattr(self, 'jar_file') or not self.jar_file:
+                print(f"⚠️  Warning: JAR file not available for vulnerability scan", file=sys.stderr)
                 return None
             
-            temp_dir = jar_file.parent
-            
-            # Run Grype scan
-            result = self.run_grype_scan(jar_file)
-            
-            if temp_dir:
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            
+            # Run Grype scan on the already-downloaded JAR
+            result = self.run_grype_scan(self.jar_file)
             return result
             
         except Exception as e:
             print(f"⚠️  Warning: Error in dependency check: {e}", file=sys.stderr)
-            if temp_dir:
-                shutil.rmtree(temp_dir, ignore_errors=True)
             return None
     
     def check_dependencies(self, pom_metadata: Optional[Dict]) -> Tuple[bool, Dict]:
@@ -349,8 +365,77 @@ class MavenAuditor:
         
         return True, result
     
+    def verify_jar_signature(self, jar_file: Path) -> Tuple[bool, Dict]:
+        """Verify JAR file signature using jarsigner"""
+        try:
+            if not jar_file or not jar_file.exists():
+                return False, {
+                    'status': 'FAIL',
+                    'jar_signed': False,
+                    'details': 'JAR file not found for signature verification'
+                }
+            
+            print(f"🔐 Verifying JAR signature: {jar_file}", file=sys.stderr)
+            
+            # Run jarsigner -verify on the JAR file
+            result = subprocess.run(
+                ["jarsigner", "-verify", str(jar_file)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Combine stdout and stderr for checking
+            output = (result.stdout + result.stderr).lower()
+            
+            # Check if JAR is unsigned - jarsigner outputs "jar is unsigned."
+            if 'jar is unsigned' in output:
+                return False, {
+                    'status': 'FAIL',
+                    'jar_signed': False,
+                    'signature_valid': False,
+                    'details': 'JAR file is unsigned'
+                }
+            
+            # jarsigner returns 0 if signature is valid
+            if result.returncode == 0:
+                return True, {
+                    'status': 'PASS',
+                    'jar_signed': True,
+                    'signature_valid': True,
+                    'details': 'JAR file signature is valid'
+                }
+            else:
+                # Other signature verification failures
+                return False, {
+                    'status': 'FAIL',
+                    'jar_signed': True,
+                    'signature_valid': False,
+                    'details': f'JAR signature verification failed: {result.stderr}'
+                }
+        
+        except subprocess.TimeoutExpired:
+            print("⚠️  Warning: JAR signature verification timed out", file=sys.stderr)
+            return False, {
+                'status': 'FAIL',
+                'jar_signed': False,
+                'details': 'Signature verification timed out'
+            }
+        except Exception as e:
+            print(f"⚠️  Warning: Error verifying JAR signature: {e}", file=sys.stderr)
+            return False, {
+                'status': 'FAIL',
+                'jar_signed': False,
+                'details': f'Error verifying signature: {str(e)}'
+            }
+    
     def check_signatures(self) -> Tuple[bool, Dict]:
         """Check package signatures"""
+        # Try to verify JAR signature if JAR file is available
+        if hasattr(self, 'jar_file') and self.jar_file:
+            return self.verify_jar_signature(self.jar_file)
+        
+        # Fallback: check for GPG signature on Maven Central
         result = {
             'status': 'PASS',
             'gpg_signature': 'Available',
@@ -468,6 +553,14 @@ class MavenAuditor:
         
         self.package_age = self.calculate_package_age(pom_metadata)
         self.risk_score, self.risk_level = self.calculate_risk_score()
+        
+        # Clean up downloaded JAR file
+        if self.jar_file and self.jar_file.parent.exists():
+            try:
+                shutil.rmtree(self.jar_file.parent, ignore_errors=True)
+                print(f"🧹 Cleaned up temporary files", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️  Warning: Could not clean up temporary files: {e}", file=sys.stderr)
     
     def generate_markdown_report(self) -> str:
         """Generate markdown audit report"""
@@ -488,23 +581,15 @@ class MavenAuditor:
         report.append(f"| **Artifact ID** | `{self.artifact_id}` |")
         report.append(f"| **Current Version** | `{self.package_data.get('version', 'unknown')}` |")
         report.append(f"| **Package URL** | {self.package_data.get('url', 'N/A')} |")
+        report.append(f"| **JAR Size** | {self.package_data.get('jar_size', 'Unknown')} |")
         report.append("")
         
         # Package Statistics
         report.append("### 📊 Package Statistics")
         report.append(f"- **Maturity**: {self.package_age.get('maturity', 'Unknown')} 📈")
-        report.append(f"- **Package Size**: Requires download for analysis")
+        report.append(f"- **Package Size**: {self.package_data.get('jar_size', 'Unknown')}")
         report.append("")
-        
-        # Signature Section
-        report.append("## 🔐 Signature & Attestation\n")
-        report.append("### GPG Signature Verification")
-        report.append("```")
-        report.append("✅ **Signature Status**: Available on Maven Central")
-        report.append("📍 **Location**: Maven Central Repository")
-        report.append("```")
-        report.append("")
-        
+
         # Security Assessment
         report.append("## 🛡️ Security Assessment\n")
         report.append(f"### 🎯 Overall Risk Score: {self.risk_score}/100 ({self.risk_level} RISK) 🟢\n")
@@ -552,14 +637,7 @@ class MavenAuditor:
         # CVEs and Vulnerability Scan
         report.append("### 1️⃣ Vulnerability Analysis (Grype Scan)\n")
         report.append("#### Known CVEs & Vulnerable Dependencies")
-        report.append("```")
-        cve_pass, cve_details = self.checks['cves']
-        report.append(f"✅ **Status**: PASS")
-        report.append(f"📊 **CVEs Found**: {cve_details.get('total', 0)}")
-        report.append(f"**Details**: {cve_details.get('details', 'No CVEs found')}")
-        report.append("```")
-        report.append("")
-        
+
         # Vulnerability Scan Results
         report.append("#### Vulnerability Scan Findings")
         report.append("```")
@@ -603,11 +681,17 @@ class MavenAuditor:
         report.append("#### Package Signatures")
         report.append("```")
         sig_pass, sig_details = self.checks['signatures']
-        report.append(f"✅ **Status**: PASS")
-        report.append(f"🔐 **GPG Signature**: {sig_details.get('gpg_signature', 'Available')}")
-        report.append(f"**Details**: {sig_details.get('details', 'Signatures available')}")
+        status = "✅ PASS" if sig_pass else "❌ FAIL"
+        report.append(f"{status} **Status**: {'Signature Valid' if sig_pass else 'Signature Invalid'}")
+        report.append(f"🔐 **JAR Signed**: {'Yes' if sig_details.get('jar_signed') else 'No'}")
+        report.append(f"**Details**: {sig_details.get('details', 'Signature verification complete')}")
         report.append("```")
         report.append("")
+        
+        # Calculate check results
+        checks_performed = len(self.checks)
+        checks_passed = sum(1 for passed, _ in self.checks.values() if passed)
+        checks_failed = checks_performed - checks_passed
         
         # Recommendations
         report.append("## 💡 Recommendations\n")
@@ -622,9 +706,14 @@ class MavenAuditor:
         report.append("- Keep dependencies up-to-date")
         report.append("- Review release notes before upgrades\n")
         
-        report.append("### ✅ Verdict")
-        report.append("**RECOMMENDED FOR USE** ✅\n")
-        report.append("This package appears safe for use. Verify maintainer and repository on Maven Central.\n")
+        # Verdict based on failed checks
+        report.append("### Verdict")
+        if checks_failed == 0:
+            report.append("**RECOMMENDED FOR USE** ✅\n")
+            report.append("This package appears safe for use. Verify maintainer and repository on Maven Central.\n")
+        else:
+            report.append("**NOT RECOMMENDED** ❌\n")
+            report.append(f"This package has {checks_failed} failed security check(s). Review the findings above before use.\n")
         
         report.append("---\n")
         
@@ -633,9 +722,9 @@ class MavenAuditor:
         report.append("```")
         report.append("🐺 **Auditor**: Maven Package Auditor v1.0.0")
         report.append(f"📅 **Audit Date**: {self.audit_date.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        report.append("✅ **Checks Performed**: 8")
-        report.append("✅ **Checks Passed**: 8")
-        report.append("❌ **Checks Failed**: 0")
+        report.append(f"✅ **Checks Performed**: {checks_performed}")
+        report.append(f"✅ **Checks Passed**: {checks_passed}")
+        report.append(f"❌ **Checks Failed**: {checks_failed}")
         report.append("⚠️ **Warnings**: 0")
         report.append("```\n")
         

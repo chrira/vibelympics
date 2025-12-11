@@ -11,6 +11,10 @@ docker build -t maven-auditor .
 
 ### Run an Audit
 ```bash
+# Audit apache maven (specific version)
+# https://mvnrepository.com/artifact/org.apache.maven/maven-core/3.0.4
+docker run maven-auditor org.apache.maven:maven-core:3.0.4
+
 # Audit Spring Boot Starter (specific version)
 docker run maven-auditor org.springframework.boot:spring-boot-starter:4.0.0
 
@@ -22,10 +26,6 @@ docker run maven-auditor org.apache:commons-lang3:3.14.0
 
 # Audit JUnit (latest version)
 docker run maven-auditor junit:junit
-
-# Audit apache maven (specific version)
-# https://mvnrepository.com/artifact/org.apache.maven/maven-core/3.0.4
-docker run maven-auditor org.apache.maven:maven-core:3.0.4
 ```
 
 ## Features

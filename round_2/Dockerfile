@@ -1,19 +1,14 @@
-# 🐺 Maven Package Auditor - Alpine-based Container
-# Using Alpine Linux for lightweight image with Java, Maven, and security tools
+# 🐺 Maven Package Auditor - Chainguard-based Container
+# Using Chainguard base image with Python for fast vulnerability scanning
 
-FROM alpine:latest
+FROM cgr.dev/chainguard/python:latest-dev
 
 USER root
 
-# Install Python, Java, Maven, and other required tools
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    openjdk17-jdk \
-    maven \
-    wget \
-    tar \
-    gzip
+# Install Java, Maven, and other required tools
+RUN apk update && apk add --no-cache --update-cache \
+    openjdk-21 \
+    maven
 
 # Install Grype - Fast vulnerability scanner optimized for artifacts
 # Download Grype binary directly from GitHub releases
@@ -26,10 +21,11 @@ RUN mkdir -p /tmp/grype && \
     cd / && \
     rm -rf /tmp/grype
 
-# Create non-root user for security
-RUN addgroup -S auditor && adduser -S auditor -G auditor
+USER nonroot
 
-USER auditor
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+ENV PATH="$PATH:$JAVA_HOME/bin"
+
 
 # Set working directory
 WORKDIR /app
