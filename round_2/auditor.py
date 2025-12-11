@@ -108,16 +108,30 @@ class MavenAuditor:
                     
                     versions_elem = versioning.find('versions')
                     versions = []
+                    version_timestamps = {}
+                    
                     if versions_elem is not None:
                         versions = [v.text for v in versions_elem.findall('version')]
+                        
+                        # Get timestamps for each version if available
+                        for version_elem in versions_elem.findall('version'):
+                            version_text = version_elem.text
+                            last_updated_elem = version_elem.get('lastUpdated')
+                            if version_text and last_updated_elem:
+                                version_timestamps[version_text] = last_updated_elem
                     
-                    return {
+                    result = {
                         'latest': latest,
                         'release': release,
                         'last_updated': last_updated,
                         'versions': versions,
                         'total_versions': len(versions)
                     }
+                    
+                    if version_timestamps:
+                        result['version_timestamps'] = version_timestamps
+                    
+                    return result
         except (urllib.error.URLError, ET.ParseError) as e:
             pass
         
@@ -570,17 +584,98 @@ class MavenAuditor:
         return True, result
     
     def calculate_package_age(self, pom_metadata: Optional[Dict]) -> Dict:
-        """Calculate package age"""
+        """Calculate package age and version information using Maven Central data"""
+        from datetime import datetime
+        
         result = {
             'first_release': 'Unknown',
-            'age_years': 'Unknown',
-            'maturity': 'Unknown'
+            'current_version_age': 'Unknown',
+            'newest_same_major': 'Unknown',
+            'newest_overall': 'Unknown',
+            'versions_since_current': 'Unknown',
+            'maturity': 'Unknown',
+            'total_versions': 'Unknown'
         }
         
-        if pom_metadata and pom_metadata.get('versions'):
-            # Assume first version is oldest
-            result['first_release'] = 'See Maven Central'
-            result['maturity'] = 'Established' if pom_metadata.get('total_versions', 0) > 10 else 'New'
+        if not pom_metadata or not pom_metadata.get('versions'):
+            return result
+            
+        versions = pom_metadata.get('versions', [])
+        if not versions:
+            return result
+            
+        try:
+            # Get version timestamps if available
+            version_timestamps = pom_metadata.get('version_timestamps', {})
+            
+            # Sort versions by their timestamps (if available) or by version string
+            def get_version_timestamp(v):
+                ts = version_timestamps.get(v, '0')
+                try:
+                    return int(ts)
+                except (ValueError, TypeError):
+                    return 0
+                    
+            # Sort versions by timestamp (newest first)
+            sorted_versions = sorted(
+                versions,
+                key=lambda v: (get_version_timestamp(v), v),
+                reverse=True
+            )
+            
+            # Get current version info
+            current_version = self.version
+            current_timestamp = get_version_timestamp(current_version) if current_version else 0
+            
+            # Calculate current version age
+            if current_timestamp:
+                try:
+                    release_date = datetime.fromtimestamp(current_timestamp / 1000)
+                    days_old = (datetime.now() - release_date).days
+                    
+                    if days_old < 30:
+                        result['current_version_age'] = f"{days_old} day{'s' if days_old != 1 else ''}"
+                    else:
+                        months = days_old // 30
+                        if months < 12:
+                            result['current_version_age'] = f"{months} month{'s' if months > 1 else ''}"
+                        else:
+                            years = days_old // 365
+                            result['current_version_age'] = f"{years} year{'s' if years > 1 else ''}"
+                except Exception as e:
+                    print(f"⚠️  Warning: Error calculating version age: {e}", file=sys.stderr)
+            
+            # Find newest versions
+            if sorted_versions:
+                result['newest_overall'] = sorted_versions[0]
+                
+                # Find newest in same major version
+                if current_version and '.' in current_version:
+                    current_major = current_version.split('.')[0]
+                    for v in sorted_versions:
+                        if v.startswith(current_major + '.'):
+                            result['newest_same_major'] = v
+                            break
+                
+                # Count versions since current
+                if current_version in sorted_versions:
+                    result['versions_since_current'] = sorted_versions.index(current_version)
+            
+            # Set first release (oldest version)
+            if versions:
+                result['first_release'] = min(versions, key=lambda v: get_version_timestamp(v))
+                result['total_versions'] = len(versions)
+                
+                # Determine maturity based on version count and age
+                if len(versions) > 10:
+                    result['maturity'] = 'Mature'
+                elif len(versions) > 3:
+                    result['maturity'] = 'Established'
+                else:
+                    result['maturity'] = 'New'
+                    
+        except Exception as e:
+            print(f"⚠️  Warning: Error in version analysis: {e}", file=sys.stderr)
         
         return result
     
@@ -652,6 +747,13 @@ class MavenAuditor:
         report.append(f"| **Group ID** | `{self.group_id}` |")
         report.append(f"| **Artifact ID** | `{self.artifact_id}` |")
         report.append(f"| **Current Version** | `{self.package_data.get('version', 'unknown')}` |")
+        report.append(f"| **Current Version Age** | {self.package_age.get('current_version_age', 'Unknown')} |")
+        report.append(f"| **Newest in Same Major** | {self.package_age.get('newest_same_major', 'Unknown')} |")
+        report.append(f"| **Newest Overall** | {self.package_age.get('newest_overall', 'Unknown')} |")
+        report.append(f"| **Versions Since Current** | {self.package_age.get('versions_since_current', 'Unknown')} |")
+        report.append(f"| **First Release** | {self.package_age.get('first_release', 'Unknown')} |")
+        report.append(f"| **Total Versions** | {self.package_age.get('total_versions', 'Unknown')} |")
+        report.append(f"| **Maturity** | {self.package_age.get('maturity', 'Unknown')} |")
         report.append(f"| **Package URL** | {self.package_data.get('url', 'N/A')} |")
         report.append(f"| **JAR Size** | {self.package_data.get('jar_size', 'Unknown')} |")
         report.append("")
